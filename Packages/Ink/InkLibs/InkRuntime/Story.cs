@@ -166,9 +166,9 @@ namespace Ink.Runtime
         /// Start recording ink profiling information during calls to Continue on Story.
         /// Return a Profiler instance that you can request a report from when you're finished.
         /// </summary>
-		public Profiler StartProfiling() {
+		public UnityEngine.Profiling.Profiler StartProfiling() {
             IfAsyncWeCant ("start profiling");
-			_profiler = new Profiler();
+			_profiler = new UnityEngine.Profiling.Profiler();
 			return _profiler;
 		}
 
@@ -2771,7 +2771,7 @@ namespace Ink.Runtime
 
         bool _asyncSaving;
 
-        Profiler _profiler;
+        UnityEngine.Profiling.Profiler _profiler;
 	}
 }
 
