@@ -109,6 +109,10 @@ namespace Ink.UnityIntegration {
 			attachedWhileInPlayMode = EditorApplication.isPlaying;
 			InkPlayerWindow.story = story;
             
+			// Clear the last loaded story setup on attaching stories. We don't NEED to do this but it's never really helpful and often seems like a bug.
+			InkPlayerWindowState.Instance.lastStoryJSONAssetPath = null;
+			InkPlayerWindowState.Instance.lastStoryWasPlaying = false;
+
             // This allows reconstructing the story so it can be used after recompile. However, it can be expensive to run so there's a good argument for not running it on play!
             // var lastTime = Time.realtimeSinceStartup;
             // storyJSON = InkPlayerWindow.story.ToJson();
@@ -375,14 +379,14 @@ namespace Ink.UnityIntegration {
 
 			public StoryPanelState storyPanelState = new StoryPanelState() {showing=true};
 			public BaseStoryPanelState choicePanelState = new BaseStoryPanelState() {showing=true};
-			public DivertPanelState divertPanelState = new DivertPanelState();
+			public BaseStoryPanelState profilerPanelState = new BaseStoryPanelState();
+			public BaseStoryPanelState saveLoadPanelState = new BaseStoryPanelState();
+			// public DivertPanelState divertPanelState = new DivertPanelState();
 			public NamedContentPanelState namedContentPanelState = new NamedContentPanelState();
 			public FunctionPanelState functionPanelState = new FunctionPanelState();
 			// public FunctionPanelState.FunctionParams functionParams = new FunctionPanelState.FunctionParams();
 			public VariablesPanelState variablesPanelState = new VariablesPanelState();
 			public ObservedVariablesPanelState observedVariablesPanelState = new ObservedVariablesPanelState();
-			public BaseStoryPanelState saveLoadPanelState = new BaseStoryPanelState();
-			public BaseStoryPanelState profilerPanelState = new BaseStoryPanelState();
 		}
 
 		
@@ -480,10 +484,10 @@ namespace Ink.UnityIntegration {
 			public string searchString = string.Empty;
 		}
 
-		[System.Serializable]
-		public class DivertPanelState : BaseStoryPanelState {
-			public string divertCommand = String.Empty;
-		}
+		// [System.Serializable]
+		// public class DivertPanelState : BaseStoryPanelState {
+		// 	public string divertCommand = String.Empty;
+		// }
 
 		static ReorderableList functionInputList;
 		[System.Serializable]
@@ -493,6 +497,7 @@ namespace Ink.UnityIntegration {
 				[System.Serializable]
 				public class FunctionInput {
 					public enum FunctionInputType {
+						Float,
 						Int,
 						String,
 						Bool,
@@ -500,6 +505,7 @@ namespace Ink.UnityIntegration {
 						InkListVariable
 					}
 					public FunctionInputType type;
+					public float floatValue;
 					public int intValue;
 					public string stringValue;
 					public bool boolValue;
@@ -522,6 +528,8 @@ namespace Ink.UnityIntegration {
 
 					public override int GetHashCode () {	
 						switch(type) {
+						case FunctionPanelState.FunctionParams.FunctionInput.FunctionInputType.Float:
+							return floatValue.GetHashCode();
 						case FunctionPanelState.FunctionParams.FunctionInput.FunctionInputType.Int:
 							return intValue.GetHashCode();
 						case FunctionPanelState.FunctionParams.FunctionInput.FunctionInputType.String:
@@ -813,7 +821,6 @@ namespace Ink.UnityIntegration {
 		}
 
 		
-
 		static void Play (TextAsset storyJSONTextAsset) {
 			Play(storyJSONTextAsset, InkPlayerParams.Standard);
 		}
@@ -832,6 +839,7 @@ namespace Ink.UnityIntegration {
 				PlayInternal();
 			}
 		}
+
 
 		static void PlayInternal () {
 			story = new Story(storyJSON);
@@ -872,6 +880,7 @@ namespace Ink.UnityIntegration {
 			InkPlayerWindowState.Save();
 		}
 
+
 		static void OnSetStory () {
 			_story.onDidContinue += OnDidContinue;
 			_story.onMakeChoice += OnMakeChoice;
@@ -905,13 +914,15 @@ namespace Ink.UnityIntegration {
             RefreshVisibleHistory();
             RefreshVisibleVariables();
 
-			InkPlayerWindowState.Instance.lastStoryWasPlaying = true;
+			if(!attached) 
+				InkPlayerWindowState.Instance.lastStoryWasPlaying = true;
 			InkPlayerWindowState.Save();
 			
 			if(playerParams.profileOnStart) isProfiling = true;
 
 			PingAutomator();
 		}
+
 
 		static void PingAutomator () {
 			if(playerParams.disablePlayControls) return;
@@ -1050,9 +1061,14 @@ namespace Ink.UnityIntegration {
 			}
 
 			this.Repaint();
+			
+			var lw = EditorGUIUtility.labelWidth;
+			EditorGUIUtility.labelWidth = 200;
+
 			scrollPosition = EditorGUILayout.BeginScrollView(scrollPosition);
 
-			if(story == null && attached) DetachInstance();
+			if(story == null && attached) 
+				DetachInstance();
 
 			DisplayHeader();
 
@@ -1091,6 +1107,8 @@ namespace Ink.UnityIntegration {
                 var scrollRectMaxY = GUILayoutUtility.GetLastRect().yMax;
                 mainScrollViewActive = lastRectMaxY >= (scrollRectMaxY-3);
             }
+
+			EditorGUIUtility.labelWidth = lw;
 		}
 		
 		void DisplayHeader () {
@@ -1780,7 +1798,7 @@ namespace Ink.UnityIntegration {
 		#region SaveLoad
 		static void DrawSaveLoad () {
 			EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
-			InkPlayerWindowState.Instance.saveLoadPanelState.showing = EditorGUILayout.Foldout(InkPlayerWindowState.Instance.saveLoadPanelState.showing, "Story State", true);
+			InkPlayerWindowState.Instance.saveLoadPanelState.showing = EditorGUILayout.Foldout(InkPlayerWindowState.Instance.saveLoadPanelState.showing, "Save/Load", true);
 			EditorGUILayout.EndHorizontal();
 			if(InkPlayerWindowState.Instance.saveLoadPanelState.showing)
 				DrawSaveLoadPanel ();
@@ -2019,6 +2037,9 @@ namespace Ink.UnityIntegration {
 					var input = functionParams.inputs[i];
 					object obj = null;
 					switch(input.type) {
+					case FunctionPanelState.FunctionParams.FunctionInput.FunctionInputType.Float:
+						obj = input.floatValue;
+						break;
 					case FunctionPanelState.FunctionParams.FunctionInput.FunctionInputType.Int:
 						obj = input.intValue;
 						break;
@@ -2102,6 +2123,9 @@ namespace Ink.UnityIntegration {
 				input.type = (FunctionPanelState.FunctionParams.FunctionInput.FunctionInputType)EditorGUI.EnumPopup(typeRect, input.type);
 				Rect inputRect = new Rect(rect.x + 90, rect.y, rect.width - 90, EditorGUIUtility.singleLineHeight);
 				switch(input.type) {
+				case FunctionPanelState.FunctionParams.FunctionInput.FunctionInputType.Float:
+					input.floatValue = EditorGUI.FloatField(inputRect, input.floatValue);
+					break;
 				case FunctionPanelState.FunctionParams.FunctionInput.FunctionInputType.Int:
 					input.intValue = EditorGUI.IntField(inputRect, input.intValue);
 					break;
@@ -2212,7 +2236,7 @@ namespace Ink.UnityIntegration {
                 return;
             EditorGUILayout.BeginHorizontal();
             object variableValue = story.variablesState[variable];
-            if(DrawVariableLayout(new GUIContent(variable), variable, ref variableValue, "observable")) {
+            if(DrawVariableLayout(new GUIContent(variable, variableValue.GetType().Name), variable, ref variableValue, "observable")) {
                 variableToChange = variable;
                 newVariableValue = variableValue;
             }
@@ -2272,22 +2296,22 @@ namespace Ink.UnityIntegration {
 			if(variableValue is string) {
 				EditorGUI.BeginDisabledGroup(playerParams.disableSettingVariables);
 				variableValue = EditorGUILayout.DelayedTextField(guiContent, (string)variableValue);
-                anythingChanged = lastVariableValue != variableValue;
+                anythingChanged = (string)lastVariableValue != (string)variableValue;
 				EditorGUI.EndDisabledGroup();
 			} else if(variableValue is float) {
 				EditorGUI.BeginDisabledGroup(playerParams.disableSettingVariables);
 				variableValue = EditorGUILayout.FloatField(guiContent, (float)variableValue);
-                anythingChanged = lastVariableValue != variableValue;
+                anythingChanged = (float)lastVariableValue != (float)variableValue;
 				EditorGUI.EndDisabledGroup();
 			} else if(variableValue is int) {
 				EditorGUI.BeginDisabledGroup(playerParams.disableSettingVariables);
 				variableValue = EditorGUILayout.IntField(guiContent, (int)variableValue);
-                anythingChanged = lastVariableValue != variableValue;
+                anythingChanged = (int)lastVariableValue != (int)variableValue;
 				EditorGUI.EndDisabledGroup();
 			} else if(variableValue is bool) {
 				EditorGUI.BeginDisabledGroup(playerParams.disableSettingVariables);
 				variableValue = EditorGUILayout.Toggle(guiContent, (bool)variableValue);
-                anythingChanged = lastVariableValue != variableValue;
+                anythingChanged = (bool)lastVariableValue != (bool)variableValue;
 				EditorGUI.EndDisabledGroup();
 			} else if(variableValue is InkList) {
 				anythingChanged = EditorGUILayoutInkListField(guiContent, (InkList)variableValue, variableName+expandedIDModifier);
