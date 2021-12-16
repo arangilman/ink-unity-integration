@@ -46,6 +46,7 @@ ExportedObj/
 *.unityproj
 *.booproj
 *.sublime-project
+/.vs/
 /.vscode/
 
 # ============ #
