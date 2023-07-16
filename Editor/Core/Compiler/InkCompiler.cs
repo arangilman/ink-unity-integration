@@ -84,8 +84,10 @@ namespace Ink.UnityIntegration {
 				return instance.compilationStack.Count > 0;
 			}
 		}
-		public delegate void OnCompileInkEvent (InkFile inkFile);
-		public static event OnCompileInkEvent OnCompileInk;
+
+		// This runs once when the compilation stack completes.
+		public delegate void OnCompleteInkCompliationStackEvent (InkFile[] inkFiles);
+		public static event OnCompleteInkCompliationStackEvent OnCompileInk;
 
 		
 		[Serializable]
@@ -149,7 +151,7 @@ namespace Ink.UnityIntegration {
         public static void RemoveFromPendingCompilationStack (InkFile inkFile) {
             bool anyChange = false;
 			anyChange = instance.pendingCompilationStack.Remove(inkFile.filePath) || anyChange;
-            foreach(var includeFile in inkFile.inkFilesInIncludeHierarchy) {
+            foreach(var includeFile in inkFile.includesInkFiles) {
                 anyChange = instance.pendingCompilationStack.Remove(includeFile.filePath) || anyChange;
             }
 			if(anyChange)
@@ -234,7 +236,8 @@ namespace Ink.UnityIntegration {
 			set => SessionState.SetBool("InkLibraryDisallowedAutoRefresh", value);
 		}
 
-        // Actions to run when we finish compiling.
+        // Actions that are passed into the CompileInk function, to run and then clear when we complete the compilation stack.
+		// To recieve an event each time the stack completes, see OnCompileInk.
         static List<Action> onCompleteActions = new List<Action>();
 		
 		// Thread lock
@@ -299,7 +302,7 @@ namespace Ink.UnityIntegration {
 				inkFile.warnings.Clear();
 				inkFile.todos.Clear();
 
-				foreach(var childInkFile in inkFile.inkFilesInIncludeHierarchy) {
+				foreach(var childInkFile in inkFile.includesInkFiles) {
 					childInkFile.unhandledCompileErrors.Clear();
 					childInkFile.errors.Clear();
 					childInkFile.warnings.Clear();
@@ -441,7 +444,7 @@ namespace Ink.UnityIntegration {
 				Debug.LogError("Tried to compile ink file but input was null.");
 				return;
 			}
-			if(!inkFile.compileAsMasterFile)
+			if(!inkFile.isMaster)
 				Debug.LogWarning("Compiling InkFile which is an include. Any file created is likely to be invalid. Did you mean to call CompileInk on inkFile.master?");
 
 			// If we've not yet locked C# compilation do so now
@@ -608,8 +611,7 @@ namespace Ink.UnityIntegration {
 			instance.compilationStack.Clear();
 			instance.Save(true);
 
-			bool errorsFound = false;
-			StringBuilder filesCompiledLog = new StringBuilder("Files compiled:");
+
 
             // Create and import compiled files
 			AssetDatabase.StartAssetEditing();
@@ -623,6 +625,10 @@ namespace Ink.UnityIntegration {
 			}
 			AssetDatabase.StopAssetEditing();
 
+
+			// Sets output info for each InkFile (todos, warnings and errors); produces and fires the post-compliation log
+			bool errorsFound = false;
+			StringBuilder filesCompiledLog = new StringBuilder("Files compiled:");
 			foreach (var compilingFile in compilationStack) {
 				if(compilingFile.inkFile.inkAsset != null) {
                     // Load and store a reference to the compiled file
@@ -648,7 +654,7 @@ namespace Ink.UnityIntegration {
                         compilingFile.SetOutputLog();
                         bool errorsInEntireStory = false;
                         bool warningsInEntireStory = false;
-                        foreach(var inkFile in compilingFile.inkFile.inkFilesInIncludeHierarchy) {
+                        foreach(var inkFile in compilingFile.inkFile.includesInkFiles) {
                             if(inkFile.hasErrors) {
                                 errorsInEntireStory = true;
                             }
@@ -670,13 +676,6 @@ namespace Ink.UnityIntegration {
                     Debug.LogError("Ink file at "+compilingFile.inkAbsoluteFilePath+" was not found after compilation");
                 }
 			}
-			
-
-			foreach (var compilingFile in compilationStack) {
-				if (OnCompileInk != null) {
-					OnCompileInk (compilingFile.inkFile);
-				}
-			}
 
 			StringBuilder outputLog = new StringBuilder ();
 			if(errorsFound) {
@@ -690,6 +689,9 @@ namespace Ink.UnityIntegration {
 				outputLog.Append (filesCompiledLog.ToString());
 				Debug.Log(outputLog);
 			}
+
+
+			// Clean up locks and progress bars
 			#if UNITY_2020_2_OR_NEWER
 			Progress.Remove(compileProgressID);
 			compileProgressID = -1;
@@ -717,6 +719,23 @@ namespace Ink.UnityIntegration {
             
             buildBlocked = false;
 
+
+			// Fires completion events
+            foreach(var onCompleteAction in onCompleteActions) {
+                if(onCompleteAction != null) onCompleteAction();
+            }
+            onCompleteActions.Clear();
+			
+			if (OnCompileInk != null) {
+				InkFile[] inkFilesCompiled = new InkFile[compilationStack.Count];
+				for (int i = 0; i < compilationStack.Count; i++) {
+					inkFilesCompiled[i] = compilationStack[i].inkFile;
+				}
+				if(OnCompileInk != null) OnCompileInk (inkFilesCompiled);
+			}
+
+
+			// If we wanted to enter play mode but were blocked because of ink compliation, enter play mode now.
 			if(playModeBlocked) {
                 playModeBlocked = false;
 				if(!errorsFound) {
@@ -729,11 +748,7 @@ namespace Ink.UnityIntegration {
 					Debug.LogWarning("Play mode not entered after ink compilation because ink had errors.");
 				}
 			}
-
-            foreach(var onCompleteAction in onCompleteActions) {
-                if(onCompleteAction != null) onCompleteAction();
-            }
-            onCompleteActions.Clear();
+			
 		}
 		#endregion
 

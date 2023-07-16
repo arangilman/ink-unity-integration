@@ -133,6 +133,11 @@ namespace Ink.UnityIntegration {
 			Application.OpenURL("https://github.com/inkle/ink/blob/master/Documentation/RunningYourInk.md");
 		}
 
+		[MenuItem("Help/Ink/Discord (Community + Support...")]
+		public static void OpenDiscord() {
+			Application.OpenURL("https://discord.gg/inkle");
+		}
+
 		[MenuItem("Help/Ink/Donate...")]
 		public static void Donate() {
 			Application.OpenURL("https://www.patreon.com/inkle");
@@ -147,17 +152,22 @@ namespace Ink.UnityIntegration {
 		}
 
 		public static TextAsset CreateStoryStateTextFile (string jsonStoryState, string defaultPath = "Assets/Ink", string defaultName = "storyState") {
-			string name = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(defaultPath, defaultName+".json")).Substring(defaultPath.Length+1);
+			string name = AssetDatabase.GenerateUniqueAssetPath(Path.Combine(defaultPath, defaultName+".json"));
+			if(!string.IsNullOrEmpty(defaultPath)) name = name.Substring(defaultPath.Length+1);
 			string fullPathName = EditorUtility.SaveFilePanel("Save Story State", defaultPath, name, "json");
 			if(fullPathName == "") 
 				return null;
 			using (StreamWriter outfile = new StreamWriter(fullPathName)) {
 				outfile.Write(jsonStoryState);
 			}
-			string relativePath = AbsoluteToUnityRelativePath(fullPathName);
-			AssetDatabase.ImportAsset(relativePath);
-			TextAsset textAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(relativePath);
-			return textAsset;
+			
+			if(fullPathName.StartsWith(Application.dataPath)) {
+				string relativePath = AbsoluteToUnityRelativePath(fullPathName);
+				AssetDatabase.ImportAsset(relativePath);
+				TextAsset textAsset = AssetDatabase.LoadAssetAtPath<TextAsset>(relativePath);
+				return textAsset;
+			}
+			else return null;
 		}
 
 		public static bool StoryContainsVariables (Story story) {
@@ -261,12 +271,17 @@ namespace Ink.UnityIntegration {
 		/// <param name="path">The path to check.</param>
 		/// <returns>True if it's an ink file, otherwise false.</returns>
 		public static bool IsInkFile(string path) {
+			if (string.IsNullOrEmpty(path)) return false;
 			string extension = Path.GetExtension(path);
 			if (extension == InkEditorUtils.inkFileExtension) {
 				return true;
-			}
-
-			return String.IsNullOrEmpty(extension) && InkLibrary.instance.inkLibrary.Exists(f => f.filePath == path);
+			} else if (String.IsNullOrEmpty(extension)) {
+				if (File.GetAttributes(path).HasFlag(FileAttributes.Directory)) return false;
+				// This check exists only in the case of ink files that lack the .ink extension.
+				// We support this mostly for legacy reasons - Inky didn't used to add .ink by default which made a this relatively common issue.
+				// This function needs to be speedy but getting all the ink file paths is a bit slow, so I'd like to remove support for missing extensions in the future.
+				return InkLibrary.instance.inkLibrary.Exists(f => f.filePath == path);
+			} else return false;
 		}
 
 
@@ -277,15 +292,19 @@ namespace Ink.UnityIntegration {
 		/// </summary>
 		public static void OpenInEditor (InkFile inkFile, InkCompilerLog log) {
 			var targetFilePath = log.GetAbsoluteFilePath(inkFile);
-			#if UNITY_2019_1_OR_NEWER
+			// EditorUtility.OpenWithDefaultApp(targetFilePath);
+			AssetDatabase.OpenAsset(inkFile.inkAsset, log.lineNumber);
+			// Unity.CodeEditor.CodeEditor.OSOpenFile();
+#if UNITY_2019_1_OR_NEWER
+
 			// This function replaces OpenFileAtLineExternal, but I guess it's totally internal and can't be accessed.
 			// CodeEditorUtility.Editor.Current.OpenProject(targetFilePath, lineNumber);
-			#pragma warning disable
+			// #pragma warning disable
+			// UnityEditorInternal.InternalEditorUtility.OpenFileAtLineExternal(targetFilePath, log.lineNumber);
+			// #pragma warning restore
+#else
 			UnityEditorInternal.InternalEditorUtility.OpenFileAtLineExternal(targetFilePath, log.lineNumber);
-			#pragma warning restore
-			#else
-			UnityEditorInternal.InternalEditorUtility.OpenFileAtLineExternal(targetFilePath, log.lineNumber);
-			#endif
+#endif
 		}
 		/// <summary>
 		/// Opens an ink file in the associated editor at the correct line number.
@@ -305,6 +324,107 @@ namespace Ink.UnityIntegration {
 			#else
 			UnityEditorInternal.InternalEditorUtility.OpenFileAtLineExternal(masterFilePath, lineNumber);
 			#endif
+		}
+
+
+
+
+		public static string FormatJson(string json) {
+			const string INDENT_STRING = "	";
+
+			int indentation = 0;
+			int quoteCount = 0;
+			var result = 
+				from ch in json
+				let quotes = ch == '"' ? quoteCount++ : quoteCount
+				let lineBreak = ch == ',' && quotes % 2 == 0 ? ch + Environment.NewLine +  String.Concat(Enumerable.Repeat(INDENT_STRING, indentation)) : null
+				let openChar = ch == '{' || ch == '[' ? ch + Environment.NewLine + String.Concat(Enumerable.Repeat(INDENT_STRING, ++indentation)) : ch.ToString()
+				let closeChar = ch == '}' || ch == ']' ? Environment.NewLine + String.Concat(Enumerable.Repeat(INDENT_STRING, --indentation)) + ch : ch.ToString()
+				select lineBreak == null    
+							? openChar.Length > 1 
+								? openChar 
+								: closeChar
+							: lineBreak;
+
+			return String.Concat(result);
+		}
+		
+		
+		
+ 
+		// This code works but it throws errors that can't be caught for non-installed build target groups. I've left the code for others to use but it's considered alpha for now! 
+		public static void AddGlobalDefine() {
+			foreach (BuildTargetGroup buildTargetGroup in (BuildTargetGroup[]) Enum.GetValues(typeof(BuildTargetGroup))) {
+				Add(buildTargetGroup, "INK_RUNTIME", "INK_EDITOR");
+				// if(BuildPipeline.IsBuildTargetSupported(buildTargetGroup, BuildTarget.NoTarget))
+			}
+			
+			const char DEFINE_SEPARATOR = ';';
+			static void Add(BuildTargetGroup buildTargetGroup, params string[] defines)
+			{
+				var allDefines = new List<string>();
+				string definesStr = PlayerSettings.GetScriptingDefineSymbolsForGroup(buildTargetGroup);
+				allDefines = definesStr.Split(DEFINE_SEPARATOR).ToList();
+				allDefines.AddRange(defines.Except(allDefines));
+				PlayerSettings.SetScriptingDefineSymbolsForGroup(buildTargetGroup, string.Join(DEFINE_SEPARATOR.ToString(), allDefines.ToArray()));
+			}
+		}
+
+		public static void RemoveGlobalDefine() {
+			foreach (BuildTargetGroup buildTargetGroup in (BuildTargetGroup[]) Enum.GetValues(typeof(BuildTargetGroup))) {
+				Remove(buildTargetGroup, "INK_RUNTIME", "INK_EDITOR");
+				// if(BuildPipeline.IsBuildTargetSupported(buildTargetGroup, BuildTarget.NoTarget))
+			}
+			
+			const char DEFINE_SEPARATOR = ';';
+			static void Remove(BuildTargetGroup buildTargetGroup, params string[] defines)
+			{
+				string definesStr = PlayerSettings.GetScriptingDefineSymbolsForGroup(buildTargetGroup);
+				var existingDefines = definesStr.Split(DEFINE_SEPARATOR).ToList();
+				var newDefines = existingDefines.Except(defines);
+				PlayerSettings.SetScriptingDefineSymbolsForGroup(buildTargetGroup, string.Join(DEFINE_SEPARATOR.ToString(), newDefines.ToArray()));
+			}
+		}
+		
+		public static bool HasGlobalDefines() {
+			foreach (BuildTargetGroup buildTargetGroup in (BuildTargetGroup[]) Enum.GetValues(typeof(BuildTargetGroup))) {
+				if (Exists(buildTargetGroup, "INK_RUNTIME", "INK_EDITOR")) return false;
+			}
+			return true;
+
+			const char DEFINE_SEPARATOR = ';';
+			static bool Exists(BuildTargetGroup buildTargetGroup, params string[] defines) {
+				string definesStr = PlayerSettings.GetScriptingDefineSymbolsForGroup(BuildTargetGroup.Standalone);
+				var existingDefines = definesStr.Split(DEFINE_SEPARATOR).ToList();
+				return existingDefines.Contains("INK_RUNTIME") && existingDefines.Contains("INK_EDITOR");
+			}
+		}
+		
+
+
+		// If this plugin is installed as a package, returns info about it.
+		public static UnityEditor.PackageManager.PackageInfo GetPackageInfo() {
+			var packageAssetPath = "Packages/com.inkle.ink-unity-integration";
+			if (AssetDatabase.IsValidFolder(packageAssetPath)) return UnityEditor.PackageManager.PackageInfo.FindForAssetPath(packageAssetPath);
+			else return null;
+		}
+		
+		// Gets the root directory of this plugin, enabling us to find assets within it.
+		// Less efficent if not installed as a package because the location/folder name is not known.
+		public static string FindAbsolutePluginDirectory() {
+			var packageInfo = GetPackageInfo();
+			if (packageInfo != null) {
+				return packageInfo.resolvedPath;
+			} else {
+				// Find the InkLibs folder. We assume that it exists in the top level of the plugin folder. We use this folder because it has a fairly unique name and is essential for the plugin to function.
+				string[] guids = AssetDatabase.FindAssets("t:DefaultAsset", new[] {"Assets"}).Where(g => AssetDatabase.GUIDToAssetPath(g).EndsWith("/InkLibs")).ToArray();
+				if (guids.Length > 0) {
+					var assetPathOfInkLibsFolder = AssetDatabase.GUIDToAssetPath(guids[0]);
+					var rootPluginFolder = assetPathOfInkLibsFolder.Substring(0, assetPathOfInkLibsFolder.Length - "/InkLibs".Length);
+					return Path.GetFullPath(Path.Combine(Application.dataPath, "..", rootPluginFolder));
+				}
+			}
+			return null; // If no folder is found
 		}
 	}
 }

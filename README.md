@@ -14,27 +14,29 @@ This Unity package allows you to integrate inkle's [ink narrative scripting lang
 
 # Getting started
 
-## :inbox_tray: Downloading the package
+## :inbox_tray: Installation
+There are 4 different ways to install this plugin:
 
 ### From GitHub
 You can install [this fork](https://github.com/zoniventris/ink-unity-integration) by following [the normal steps for adding a Unity package from a git URL](https://docs.unity3d.com/Manual/upm-ui-giturl.html).
 
-
-
 ## :video_game: Demos
 This project includes a demo scene, providing a simple example of how to control an ink story with C# code using Unity UI.
 
-(If you imported this package as a UPM (recommended), then you must first import the demos from Packages > Ink Unity Integration > Examples)
+(If you imported this package as a UPM, then you must first import the demos from Packages > Ink Unity Integration > Demos)
 
 To run a demo, double-click the scene file at the root of the demo folder to open it, and press the Play button at the top of the screen to start it.
 
 ## :page_facing_up: C# API
 The C# API provides all you need to control ink stories in code; advancing your story, making choices, diverting to knots, saving and loading, and much more.
-[It is documented in the main ink repo](https://github.com/inkle/ink/blob/master/Documentation/RunningYourInk.md#getting-started-with-the-runtime-api)
+
+[It is documented in the main ink repo](https://github.com/inkle/ink/blob/master/Documentation/RunningYourInk.md#getting-started-with-the-runtime-api).
+
 For convenience, the package also creates an (**Help > Ink > API Documentation**) menu option.
 
 ## :pencil2: Writing ink
 For more information on writing with **ink**, see [the documentation in the main ink repo](https://github.com/inkle/ink). 
+
 For convenience, the package also creates an (**Help > Ink > Writing Tutorial**) menu option.
 
 
@@ -121,22 +123,19 @@ If your game doesn't require compiling ink at runtime we recommend adding a .asm
 
 * What versions of Unity are supported?
 
-  We officially support 2018 LTS and above, but it should work going back to at least Unity 5.
+  We support 2020 LTS and above.
+  Until version 1.1.1 we supported 2018 LTS, which should also work going back to at least Unity 5.
 
 # Support us!:heart:
 
 Ink is free, forever; but we'd really appreciate your support!
 If you're able to give back, generous donations at our [Patreon](https://www.patreon.com/inkle) mean the world to us. 
 
+# Discord:
+
+Looking for help or want to meet likeminded writers/developers? Come say hello on our [Discord](https://discord.gg/inkle) server! 
+
 # License
 
 **ink** and this package is released under the MIT license. Although we don't require attribution, we'd love to know if you decide to use **ink** a project! Let us know on [Twitter](http://www.twitter.com/inkleStudios) or [by email](mailto:info@inklestudios.com).
-
-### The MIT License (MIT)
-Copyright (c) 2016 inkle Ltd.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+View the full licence [Here](https://github.com/inkle/ink-unity-integration/blob/master/LICENCE.md)
